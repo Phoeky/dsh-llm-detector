@@ -54,7 +54,7 @@ export function apply(ctx) {
         },
         include_replies: {
           type: 'boolean',
-          description: 'Include truncated raw replies in the result (bounded to the first 200 characters each); default false.',
+          description: 'Include prompts and raw replies in the structured result (each reply is bounded); default false. The sidebar panel shows them by default.',
         },
       },
       required: ['action'],
@@ -257,7 +257,7 @@ export function apply(ctx) {
           status: 'complete',
         }
       }
-      return runner.execute({ ...args, signal: exec.signal })
+      return runner.execute({ ...args, include_replies: args.include_replies ?? false, signal: exec.signal })
     },
   }
 

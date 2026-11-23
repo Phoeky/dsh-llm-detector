@@ -65,6 +65,8 @@ window.__ModuleLoader__.load({
         statusError: '检测失败',
         noModels: '该渠道没有可用模型',
         retry: '重试',
+        retrying: '重试中…',
+        retryHint: '沿用该样本的原提示词重新采样，成功后重算本轮排名。',
         referenceUnavailable: '参考库不可用，无法开始检测',
         phasePreparing: '准备中',
         phaseScoring: '评分中',
@@ -127,6 +129,8 @@ window.__ModuleLoader__.load({
         statusError: 'Detection failed',
         noModels: 'This provider has no available models',
         retry: 'Retry',
+        retrying: 'Retrying…',
+        retryHint: 'Re-samples with the same prompt and recomputes this round.',
         referenceUnavailable: 'Reference bank unavailable; detection is disabled',
         phasePreparing: 'Preparing',
         phaseScoring: 'Scoring',
@@ -239,7 +243,7 @@ window.__ModuleLoader__.load({
           h('path', { d: 'M2.5 13.6h11', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }))
       }
 
-      function SampleCard({ sample }) {
+      function SampleCard({ sample, onRetry, retryDisabled }) {
         const stateKey = {
           queued: 'stateQueued',
           requesting: 'stateRequesting',
@@ -251,6 +255,7 @@ window.__ModuleLoader__.load({
         }[sample.state] ?? 'stateQueued'
         const busy = sample.state === 'requesting' || sample.state === 'streaming'
         const tone = sample.state === 'failed' ? 'dfp-bad' : sample.state === 'complete' ? 'dfp-ok' : ''
+        const retryable = sample.state === 'failed' || sample.state === 'cancelled'
         return h('div', { className: 'dfp-sample' },
           h('div', { className: `dfp-sample-state ${tone}` },
             h('span', null, `${sample.index}. ${t(stateKey)}`),
@@ -258,6 +263,13 @@ window.__ModuleLoader__.load({
           h('div', { className: 'dfp-sample-count' }, `${sample.count} / ${sample.expected_count}`),
           sample.error ? h('div', { className: 'dfp-sample-error' }, sample.error) : null,
           sample.note ? h('div', { className: 'dfp-sample-count' }, sample.note) : null,
+          retryable && onRetry ? h('button', {
+            className: 'dfp-btn',
+            style: { marginTop: '8px', padding: '4px 12px', fontSize: '12px' },
+            disabled: retryDisabled,
+            title: t('retryHint'),
+            onClick: () => onRetry(sample),
+          }, t('retry')) : null,
           sample.prompt ? h('details', null,
             h('summary', { className: 'dfp-sample-count' }, t('prompt')),
             h('div', { className: 'dfp-sample-text' }, sample.prompt)) : null,
@@ -266,7 +278,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dfp-sample-text' }, sample.text)) : null)
       }
 
-      function RoundView({ round }) {
+      function RoundView({ round, onRetry, busy }) {
         const probability = pct(round.probability)
         const total = round.sample_total ?? round.samples.length
         const truncated = round.samples.filter(sample => sample.state === 'truncated').length
@@ -279,7 +291,12 @@ window.__ModuleLoader__.load({
               h('div', { className: 'dfp-prob' }, probability || t('noConfidence')),
               h('div', { className: 'dfp-meta' }, probability ? t('relativeConfidence') : t('scoreOnly')))),
           truncated ? h('p', { className: 'dfp-note dfp-warn', style: { padding: '10px 16px 0' } }, t('truncatedNote')) : null,
-          h('div', { className: 'dfp-samples' }, round.samples.map(sample => h(SampleCard, { key: sample.id, sample }))),
+          h('div', { className: 'dfp-samples' }, round.samples.map(sample => h(SampleCard, {
+            key: sample.id,
+            sample,
+            onRetry: onRetry ? (target) => onRetry(round.index, target) : null,
+            retryDisabled: busy,
+          }))),
           round.top.length ? h('div', { className: 'dfp-candidates' },
             h('p', { className: 'dfp-section-title' }, t('candidates')),
             round.top.map(item => h('div', { className: 'dfp-candidate', key: item.model },
@@ -304,8 +321,8 @@ window.__ModuleLoader__.load({
         const [model, setModel] = React.useState('')
         const [modelsLoading, setModelsLoading] = React.useState(false)
         const [rounds, setRounds] = React.useState(1)
-        const [parallel, setParallel] = React.useState(1)
-        const [includeReplies, setIncludeReplies] = React.useState(false)
+        const [parallel, setParallel] = React.useState(3)
+        const [includeReplies, setIncludeReplies] = React.useState(true)
         const [job, setJob] = React.useState(null)
         const [error, setError] = React.useState('')
         const [reference, setReference] = React.useState(null)
@@ -377,8 +394,10 @@ window.__ModuleLoader__.load({
         }, [provider])
 
         const running = job?.status === 'running' || job?.status === 'cancelling'
+        const retrying = Boolean(job?.retry)
+        const busy = running || retrying
         React.useEffect(() => {
-          if (!running || !job?.id) return undefined
+          if (!busy || !job?.id) return undefined
           let alive = true
           let timer
           // 串行轮询：上一次响应落地后再排下一次，避免旧快照覆盖新状态。
@@ -387,7 +406,7 @@ window.__ModuleLoader__.load({
               const snap = await api(`/job?id=${encodeURIComponent(job.id)}`)
               if (!alive) return
               setJob(snap)
-              if (snap.status === 'running' || snap.status === 'cancelling') timer = setTimeout(tick, 1000)
+              if (snap.status === 'running' || snap.status === 'cancelling' || snap.retry) timer = setTimeout(tick, 1000)
             } catch (cause) {
               if (!alive) return
               setError(cause.message)
@@ -396,11 +415,11 @@ window.__ModuleLoader__.load({
           }
           tick()
           return () => { alive = false; clearTimeout(timer) }
-        }, [running, job?.id])
+        }, [busy, job?.id, job?.retry])
 
         const [pendingAction, setPendingAction] = React.useState(false)
         const start = async () => {
-          if (pendingAction || running || modelsLoading || !provider || !model) return
+          if (pendingAction || busy || modelsLoading || !provider || !model) return
           if (!models.some(item => item.id === model)) {
             setError(t('model') + ': ' + model)
             return
@@ -423,6 +442,21 @@ window.__ModuleLoader__.load({
           setPendingAction(true)
           try {
             const result = await api('/cancel', { method: 'POST', write: true, body: JSON.stringify({ id: job?.id }) })
+            if (result.snapshot) setJob(result.snapshot)
+          } catch (cause) { setError(cause.message) }
+          finally { setPendingAction(false) }
+        }
+
+        const retrySample = async (roundIndex, sample) => {
+          if (pendingAction || busy || !job?.id) return
+          setPendingAction(true)
+          setError('')
+          try {
+            const result = await api('/retry', {
+              method: 'POST',
+              write: true,
+              body: JSON.stringify({ id: job.id, round: roundIndex, index: sample.index }),
+            })
             if (result.snapshot) setJob(result.snapshot)
           } catch (cause) { setError(cause.message) }
           finally { setPendingAction(false) }
@@ -480,7 +514,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'dfp-actions' },
                   h('button', {
                     className: 'dfp-btn dfp-primary',
-                    disabled: running || pendingAction || modelsLoading || !provider || !model || !models.some(item => item.id === model) || !reference,
+                    disabled: running || pendingAction || modelsLoading || !provider || !model || !models.some(item => item.id === model) || !reference || retrying,
                     onClick: start,
                   }, running ? t('running') : job ? t('rerun') : t('start')),
                   running ? h('button', { className: 'dfp-btn', disabled: pendingAction || job?.status === 'cancelling', onClick: cancel },
@@ -522,7 +556,12 @@ window.__ModuleLoader__.load({
                   `${t('roundOf', { n: activeRound, total: job?.options?.rounds ?? 1 })} · ${job?.current?.phase === 'scoring' ? t('phaseScoring') : running ? t('roundInProgress') : t('incomplete')}`),
                 running ? h('span', { className: 'dfp-spinner', 'aria-hidden': 'true' }) : null),
               h('div', { className: 'dfp-samples' }, displaySamples.map(sample => h(SampleCard, { key: sample.id, sample })))) : null,
-            (job?.rounds ?? []).map(round => h(RoundView, { key: round.index, round })),
+            (job?.rounds ?? []).map(round => h(RoundView, {
+              key: round.index,
+              round,
+              onRetry: retrySample,
+              busy: busy || pendingAction,
+            })),
             job && !running && !job.summary.valid_rounds ? h('div', { className: 'dfp-card dfp-empty' }, job.error || t('unscorable')) : null,
             !job && !loading ? h('div', { className: 'dfp-card dfp-empty' }, t('empty')) : null,
             h('p', { className: 'dfp-note' }, t('closedSet')),
