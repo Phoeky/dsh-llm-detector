@@ -2,10 +2,10 @@
 
 **让 DeepSeek Harness 里注册的模型写一串“随机”整数，判断这个渠道背后最像哪个模型。**
 
-[![DSH plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-1f6feb?style=flat-square)](#安装)
-[![version](https://img.shields.io/badge/version-0.2.3-38bdf8?style=flat-square)](CHANGELOG.md)
-[![license](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
-[![reference bank](https://img.shields.io/badge/reference%20bank-76%20models-5eead4?style=flat-square)](#数据与参考库)
+[![DSH plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-444444?style=flat-square)](#安装)
+[![version](https://img.shields.io/badge/version-0.2.3-555555?style=flat-square)](CHANGELOG.md)
+[![license](https://img.shields.io/badge/license-MIT-444444?style=flat-square)](LICENSE)
+[![reference bank](https://img.shields.io/badge/reference%20bank-76%20models-555555?style=flat-square)](#数据与参考库)
 
 语言模型写出的“随机数”并不均匀：每个模型偏好的数值、区间、末位数字和跳变方式都相对稳定。
 本插件让模型凭第一反应写约 300 个 1–355 的整数，把结果与冻结的参考库比对，给出候选排名与
