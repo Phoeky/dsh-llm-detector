@@ -1,0 +1,28 @@
+# NOTICE
+
+dsh-llm-detector  
+Copyright (c) 2026 Phoky
+
+This plugin is a DeepSeek Harness port of the fingerprint algorithm from
+**LM Fingerpoint Detector** (<https://github.com/Ikaleio/lm-detector>),
+Copyright (c) 2026 xqy2006, released under the MIT License.
+
+Derived parts:
+
+- `lib/fingerprint.js`, `lib/positional.js`, `lib/detector.js`, `lib/codec.js`
+  are plain-JavaScript ports of `shared/fingerprint-core.js`,
+  `shared/positional.ts`, `shared/shared-detector.ts` and
+  `shared/detector-codec.ts` from that project.
+- `lib/challenge.js` ports the challenge generator from
+  `shared/challenge-browser.js` (the random source is Node's WebCrypto).
+- `data/detector.bin` and `data/models.json` are derived from that project's
+  frozen detector and reference bank (`data/shared_detector.bin`,
+  `data/unified_bank.json`).
+
+The upstream MIT license text is kept at `data/LM-DETECTOR-LICENSE`.
+
+Changes made for this plugin: TypeScript to plain JavaScript; the reference
+data is packaged as a frozen detector plus a small model manifest instead of
+the full bank; sampling goes through the DeepSeek Harness `llm` service
+(`ctx.llm.stream`) rather than direct HTTP requests; the tool surface,
+output shapes, locale metadata and icon are original to this plugin.

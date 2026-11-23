@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "LLM fingerprint detector",
+    "description": "Detect the model behind a registered DSH provider route from the number distributions it writes, using a closed reference bank.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "模型指纹检测",
+    "description": "让模型写一串“随机”整数，用数值分布与参考库比对，检测 DSH 已注册渠道背后实际是哪个模型。",
+    "detail": "docs/DETAIL.md"
+  }
+}

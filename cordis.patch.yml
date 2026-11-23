@@ -1,0 +1,5 @@
+# Register the model fingerpoint tool. No credentials or endpoints live here:
+# detection goes through the DSH `llm` service and its already configured routes.
+- insert:
+    - id: llm-detector
+      name: dsh-llm-detector

@@ -1,0 +1,52 @@
+{
+  "name": "dsh-llm-detector",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: detect the model behind a registered provider route with a number-fingerprint challenge and a closed reference bank.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "data/detector.bin",
+    "data/models.json",
+    "data/LM-DETECTOR-LICENSE",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs/DETAIL.md",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "model-fingerprint",
+    "llm-detection",
+    "lm-detector"
+  ],
+  "author": "Phoky",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Phoeky/dsh-llm-detector.git"
+  },
+  "homepage": "https://github.com/Phoeky/dsh-llm-detector#readme",
+  "bugs": {
+    "url": "https://github.com/Phoeky/dsh-llm-detector/issues"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
