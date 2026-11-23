@@ -11,7 +11,7 @@ window.__ModuleLoader__.load({
       'zh-CN': {
         tabLabel: '模型指纹',
         title: '模型指纹检测',
-        subtitle: '让模型写一串“随机”整数，与参考库比对，判断这个渠道背后最像哪个模型。',
+        subtitle: '让模型写一串“随机”整数，比较数值与序列分布，判断这个渠道背后最像参考库中的哪个模型。',
         provider: '渠道',
         model: '模型',
         rounds: '轮数',
@@ -23,8 +23,18 @@ window.__ModuleLoader__.load({
         rerun: '重新检测',
         loading: '正在读取 DSH 已注册的渠道…',
         noProvider: '当前没有可用的 provider。',
-        cost: '每轮默认 3 次真实模型调用，每次输出约 300 个整数，按渠道计费。',
-        closedSet: '结果是参考库内的闭集排序，不是身份证明。',
+        cost: '每轮 3 次真实模型调用、每次约 300 个整数，默认并发 3，按渠道计费。遇到限流可在失败样本上单独重试。',
+        closedSet: '排名只在参考库内比较：库外模型也会得到“最像”的候选，置信度不是身份证明。',
+        usageTitle: '两种使用方式',
+        usagePanel: '在本页选择渠道与模型，实时查看采样进度和候选排名。',
+        usageChat: '也可以在对话里直接说“检测当前模型的指纹”，助手会调用 llm_fingerprint 工具完成同样的检测。',
+        chatExample: '用 llm_fingerprint 检测当前模型',
+        copy: '复制指令',
+        copied: '已复制',
+        howTitle: '如何解读结果',
+        how1: '三条完整回答才提供校准置信度；部分有效样本只给排名。',
+        how2: '异常截断的样本只参与排名；失败样本可单独重试补齐，无需整轮重跑。',
+        how3: '置信度是参考库内的相对值，不覆盖库外模型，也不是渠道可信度的最终结论。',
         samples: '样本',
         candidates: '候选排名',
         confidence: '置信度',
@@ -48,7 +58,7 @@ window.__ModuleLoader__.load({
         usage: 'Token 用量',
         prompt: '提示词',
         reply: '回答',
-        empty: '选择渠道与模型后开始检测。',
+        empty: '先选择渠道与模型，再点“开始检测”；也可以在对话里让助手检测。',
         refresh: '刷新',
         back: '返回对话',
         reference: '参考库',
@@ -87,8 +97,18 @@ window.__ModuleLoader__.load({
         rerun: 'Run again',
         loading: 'Loading registered DSH providers…',
         noProvider: 'No provider is registered.',
-        cost: 'Each round makes 3 real model calls of about 300 integers, billed by your provider.',
-        closedSet: 'The result is a closed-set ranking inside the reference bank, not proof of identity.',
+        cost: 'Each round makes 3 real model calls of about 300 integers, in parallel by default, billed by your provider. Retry a rate-limited sample on its own card.',
+        closedSet: 'Ranking only compares models inside the reference bank: unlisted models still get a closest candidate, and confidence is not proof of identity.',
+        usageTitle: 'Two ways to use it',
+        usagePanel: 'Pick a provider and a model here to watch sampling and ranking live.',
+        usageChat: 'Or tell the assistant in any conversation: “detect the current model’s fingerprint”. It calls the llm_fingerprint tool for the same check.',
+        chatExample: 'Detect the current model with llm_fingerprint',
+        copy: 'Copy prompt',
+        copied: 'Copied',
+        howTitle: 'How to read the result',
+        how1: 'Calibrated confidence needs three complete replies; partial samples only produce a ranking.',
+        how2: 'Abnormally truncated samples rank without calibrated confidence. Retry failed samples individually instead of re-running the whole round.',
+        how3: 'Confidence is relative within the reference bank and does not cover unlisted models or prove a channel trustworthy.',
         samples: 'Samples',
         candidates: 'Candidates',
         confidence: 'Confidence',
@@ -112,7 +132,7 @@ window.__ModuleLoader__.load({
         usage: 'Token usage',
         prompt: 'Prompt',
         reply: 'Reply',
-        empty: 'Pick a provider and a model to start.',
+        empty: 'Pick a provider and a model to start, or ask the assistant in a conversation.',
         refresh: 'Refresh',
         back: 'Back to conversation',
         reference: 'Reference bank',
@@ -175,6 +195,12 @@ window.__ModuleLoader__.load({
 .dfp-primary{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-base);font-weight:600}
 .dfp-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary)}
 .dfp-note{font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);margin:0}
+.dfp-usage-list{margin:0;padding-left:18px;font-size:13px;line-height:1.8;color:var(--dsw-alias-label-secondary)}
+.dfp-chat-example{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+.dfp-chat-example code{flex:1;min-width:220px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dsw-alias-label-primary);white-space:normal}
+.dfp-how{margin-top:12px;font-size:13px;color:var(--dsw-alias-label-secondary)}
+.dfp-how summary{cursor:pointer;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dfp-how summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dfp-error{color:var(--dsw-alias-state-error-primary);font-size:13px;white-space:pre-wrap}
 .dfp-result-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .dfp-prediction{font-size:22px;font-weight:650}
@@ -328,6 +354,17 @@ window.__ModuleLoader__.load({
         const [reference, setReference] = React.useState(null)
         const [referenceError, setReferenceError] = React.useState('')
         const [localeTick, setLocaleTick] = React.useState(0)
+        const [copied, setCopied] = React.useState(false)
+        const copyTimer = React.useRef(null)
+        React.useEffect(() => () => clearTimeout(copyTimer.current), [])
+        const copyChatPrompt = async () => {
+          try {
+            await navigator.clipboard.writeText(t('chatExample'))
+            setCopied(true)
+            clearTimeout(copyTimer.current)
+            copyTimer.current = setTimeout(() => setCopied(false), 1600)
+          } catch { /* 剪贴板不可用时保持原样，用户可手动选择文本 */ }
+        }
 
         React.useEffect(() => {
           if (!locale?.subscribe) return undefined
@@ -532,6 +569,20 @@ window.__ModuleLoader__.load({
                 h('p', { className: 'dfp-note', style: { marginTop: '12px' } }, t('cost')),
                 reference ? h('p', { className: 'dfp-note' }, `${t('reference')}: ${reference.models} models · ${reference.built_at}`)
                   : h('p', { className: 'dfp-note dfp-warn' }, `${t('referenceUnavailable')}${referenceError ? ` · ${referenceError}` : ''}`))),
+            h('div', { className: 'dfp-card' },
+              h('p', { className: 'dfp-section-title' }, t('usageTitle')),
+              h('ul', { className: 'dfp-usage-list' },
+                h('li', null, t('usagePanel')),
+                h('li', null, t('usageChat'))),
+              h('div', { className: 'dfp-chat-example' },
+                h('code', null, t('chatExample')),
+                h('button', { className: 'dfp-btn', onClick: copyChatPrompt }, copied ? t('copied') : t('copy'))),
+              h('details', { className: 'dfp-how' },
+                h('summary', null, t('howTitle')),
+                h('ul', { className: 'dfp-usage-list' },
+                  h('li', null, t('how1')),
+                  h('li', null, t('how2')),
+                  h('li', null, t('how3'))))),
             error ? h('div', { className: 'dfp-card dfp-error', role: 'alert' }, `${t('error')}: ${error}`) : null,
             job && job.status !== 'running' && job.status !== 'cancelling' && job.status !== 'complete'
               ? h('div', { className: 'dfp-card dfp-warn', role: 'status' },
@@ -565,7 +616,8 @@ window.__ModuleLoader__.load({
             job && !running && !job.summary.valid_rounds ? h('div', { className: 'dfp-card dfp-empty' }, job.error || t('unscorable')) : null,
             !job && !loading ? h('div', { className: 'dfp-card dfp-empty' }, t('empty')) : null,
             h('p', { className: 'dfp-note' }, t('closedSet')),
-            (job?.notes ?? []).map((note, index) => h('p', { className: 'dfp-note', key: index }, note))))
+            // 前两条 notes（闭集、成本）已在页面上方说明，这里只保留本次检测特有的提示。
+            (job?.notes ?? []).slice(2).map((note, index) => h('p', { className: 'dfp-note', key: index }, note))))
       }
 
       return { Icon, Panel }
