@@ -322,13 +322,26 @@ export function apply(ctx) {
           const probability = round.probability === ''
             ? '无置信度'
             : `置信度 ${(Number(round.probability) * 100).toFixed(1)}%`
-          return `第 ${round.index} 轮：${round.prediction_name || round.evidence_label}（${probability}，有效样本 ${round.used_outputs}/3）`
+          const head = `第 ${round.index} 轮：${round.prediction_name || round.evidence_label}（${probability}，有效样本 ${round.used_outputs}/3）`
+          const top = round.top.length
+            ? `  候选：${round.top.map(item => `${item.display_name}${item.probability ? ` ${(Number(item.probability) * 100).toFixed(1)}%` : ''}`).join(' · ')}`
+            : ''
+          const samples = round.samples.map((sample, index) => {
+            const detail = sample.error
+              ? `失败：${sample.error}`
+              : `${sample.state} ${sample.count}/${sample.expected_count}`
+            return `  样本${index + 1}：${detail}`
+          })
+          return [head, top, ...samples].filter(Boolean).join('\n')
         })
-        const head = `${value.provider}/${value.model} 的数字指纹检测：\n${lines.join('\n')}`
-        const tail = value.summary.valid_rounds
-          ? `\n最常见候选：${value.summary.top_candidate_name}（${value.summary.top_candidate_rounds}/${value.summary.rounds} 轮）`
-          : '\n没有可评分的轮次。'
-        return [{ type: 'text', text: head + tail }]
+        const summary = value.summary.valid_rounds
+          ? `最常见候选：${value.summary.top_candidate_name}（${value.summary.top_candidate_rounds}/${value.summary.rounds} 轮）`
+          : '没有可评分的轮次。'
+        const notes = value.notes.map(note => `注意：${note}`)
+        return [{
+          type: 'text',
+          text: [`${value.provider}/${value.model} 的数字指纹检测：`, ...lines, summary, ...notes].join('\n'),
+        }]
       },
     },
     timeoutMs: 900_000,
