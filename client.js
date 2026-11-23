@@ -77,6 +77,9 @@ window.__ModuleLoader__.load({
         retry: '重试',
         retrying: '重试中…',
         retryHint: '沿用该样本的原提示词重新采样，成功后重算本轮排名。',
+        effort: '思考强度',
+        effortDefault: '模型默认',
+        effortUnsupported: '该模型不区分思考强度，将使用渠道默认设置。',
         referenceUnavailable: '参考库不可用，无法开始检测',
         phasePreparing: '准备中',
         phaseScoring: '评分中',
@@ -151,6 +154,9 @@ window.__ModuleLoader__.load({
         retry: 'Retry',
         retrying: 'Retrying…',
         retryHint: 'Re-samples with the same prompt and recomputes this round.',
+        effort: 'Reasoning effort',
+        effortDefault: 'Model default',
+        effortUnsupported: 'This model does not expose reasoning efforts; the provider default is used.',
         referenceUnavailable: 'Reference bank unavailable; detection is disabled',
         phasePreparing: 'Preparing',
         phaseScoring: 'Scoring',
@@ -182,7 +188,7 @@ window.__ModuleLoader__.load({
 .dfp-title{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
 .dfp-sub{margin:6px 0 0;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-secondary);max-width:620px}
 .dfp-card{background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;padding:16px}
-.dfp-form{display:grid;grid-template-columns:1fr 1fr 96px 96px;gap:12px}
+.dfp-form{display:grid;grid-template-columns:1.2fr 1.4fr 88px 88px 1fr;gap:12px}
 .dfp-field{display:flex;flex-direction:column;gap:6px;min-width:0}
 .dfp-field label{font-size:12px;color:var(--dsw-alias-label-secondary)}
 .dfp-field select,.dfp-field input{width:100%;box-sizing:border-box;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;font-size:13px;outline:none}
@@ -198,8 +204,9 @@ window.__ModuleLoader__.load({
 .dfp-usage-list{margin:0;padding-left:18px;font-size:13px;line-height:1.8;color:var(--dsw-alias-label-secondary)}
 .dfp-chat-example{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
 .dfp-chat-example code{flex:1;min-width:220px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--dsw-alias-label-primary);white-space:normal}
-.dfp-how{margin-top:12px;font-size:13px;color:var(--dsw-alias-label-secondary)}
-.dfp-how summary{cursor:pointer;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dfp-how{margin-top:0;font-size:13px;color:var(--dsw-alias-label-secondary)}
+.dfp-how>summary{cursor:pointer;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dfp-how[open]>summary{margin-bottom:10px}
 .dfp-how summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dfp-error{color:var(--dsw-alias-state-error-primary);font-size:13px;white-space:pre-wrap}
 .dfp-result-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
@@ -349,6 +356,10 @@ window.__ModuleLoader__.load({
         const [rounds, setRounds] = React.useState(1)
         const [parallel, setParallel] = React.useState(3)
         const [includeReplies, setIncludeReplies] = React.useState(true)
+        const [effort, setEffort] = React.useState('')
+        const [efforts, setEfforts] = React.useState([])
+        const [defaultEffort, setDefaultEffort] = React.useState('')
+        const [effortLoading, setEffortLoading] = React.useState(false)
         const [job, setJob] = React.useState(null)
         const [error, setError] = React.useState('')
         const [reference, setReference] = React.useState(null)
@@ -430,6 +441,36 @@ window.__ModuleLoader__.load({
           return () => { alive = false }
         }, [provider])
 
+        React.useEffect(() => {
+          if (!provider || !model) {
+            setEfforts([])
+            setDefaultEffort('')
+            setEffort('')
+            return
+          }
+          let alive = true
+          setEffortLoading(true)
+          ;(async () => {
+            try {
+              const info = await api(`/model?provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`)
+              if (!alive) return
+              const list = info.reasoning?.efforts ?? []
+              setEfforts(list)
+              setDefaultEffort(info.reasoning?.defaultEffort ?? '')
+              setEffort(current => list.some(item => item.id === current) ? current : '')
+            } catch {
+              if (!alive) return
+              // 取不到能力信息时退回“不指定”，检测本身仍按渠道默认执行。
+              setEfforts([])
+              setDefaultEffort('')
+              setEffort('')
+            } finally {
+              if (alive) setEffortLoading(false)
+            }
+          })()
+          return () => { alive = false }
+        }, [provider, model])
+
         const running = job?.status === 'running' || job?.status === 'cancelling'
         const retrying = Boolean(job?.retry)
         const busy = running || retrying
@@ -467,7 +508,7 @@ window.__ModuleLoader__.load({
             const result = await api('/start', {
               method: 'POST',
               write: true,
-              body: JSON.stringify({ provider, model, rounds, parallel, includeReplies }),
+              body: JSON.stringify({ provider, model, rounds, parallel, includeReplies, reasoning_effort: effort }),
             })
             if (result.snapshot) setJob(result.snapshot)
             else if (result.id) setJob(await api(`/job?id=${encodeURIComponent(result.id)}`))
@@ -547,7 +588,20 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'dfp-field' },
                     h('label', { htmlFor: 'dfp-parallel' }, t('parallel')),
                     h('select', { id: 'dfp-parallel', value: parallel, disabled: running || pendingAction, onChange: event => setParallel(Number(event.target.value)) },
-                      [1, 2, 3].map(n => h('option', { key: n, value: n }, n))))),
+                      [1, 2, 3].map(n => h('option', { key: n, value: n }, n)))),
+                  h('div', { className: 'dfp-field' },
+                    h('label', { htmlFor: 'dfp-effort' }, t('effort')),
+                    h('select', {
+                      id: 'dfp-effort',
+                      value: effort,
+                      disabled: running || pendingAction || effortLoading || !efforts.length,
+                      title: efforts.length ? '' : t('effortUnsupported'),
+                      onChange: event => setEffort(event.target.value),
+                    }, [
+                      h('option', { key: '', value: '' }, defaultEffort ? `${t('effortDefault')} (${defaultEffort})` : t('effortDefault')),
+                      ...efforts.filter(item => item.id !== defaultEffort).map(item =>
+                        h('option', { key: item.id, value: item.id }, item.name || item.id)),
+                    ]))),
                 h('div', { className: 'dfp-actions' },
                   h('button', {
                     className: 'dfp-btn dfp-primary',
@@ -569,20 +623,20 @@ window.__ModuleLoader__.load({
                 h('p', { className: 'dfp-note', style: { marginTop: '12px' } }, t('cost')),
                 reference ? h('p', { className: 'dfp-note' }, `${t('reference')}: ${reference.models} models · ${reference.built_at}`)
                   : h('p', { className: 'dfp-note dfp-warn' }, `${t('referenceUnavailable')}${referenceError ? ` · ${referenceError}` : ''}`))),
-            h('div', { className: 'dfp-card' },
-              h('p', { className: 'dfp-section-title' }, t('usageTitle')),
+            h('details', { className: 'dfp-card dfp-how' },
+              h('summary', null, t('usageTitle')),
               h('ul', { className: 'dfp-usage-list' },
                 h('li', null, t('usagePanel')),
                 h('li', null, t('usageChat'))),
               h('div', { className: 'dfp-chat-example' },
                 h('code', null, t('chatExample')),
-                h('button', { className: 'dfp-btn', onClick: copyChatPrompt }, copied ? t('copied') : t('copy'))),
-              h('details', { className: 'dfp-how' },
-                h('summary', null, t('howTitle')),
-                h('ul', { className: 'dfp-usage-list' },
-                  h('li', null, t('how1')),
-                  h('li', null, t('how2')),
-                  h('li', null, t('how3'))))),
+                h('button', { className: 'dfp-btn', onClick: copyChatPrompt }, copied ? t('copied') : t('copy')))),
+            h('details', { className: 'dfp-card dfp-how' },
+              h('summary', null, t('howTitle')),
+              h('ul', { className: 'dfp-usage-list' },
+                h('li', null, t('how1')),
+                h('li', null, t('how2')),
+                h('li', null, t('how3')))),
             error ? h('div', { className: 'dfp-card dfp-error', role: 'alert' }, `${t('error')}: ${error}`) : null,
             job && job.status !== 'running' && job.status !== 'cancelling' && job.status !== 'complete'
               ? h('div', { className: 'dfp-card dfp-warn', role: 'status' },
