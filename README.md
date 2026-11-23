@@ -3,7 +3,7 @@
 **让 DeepSeek Harness 里注册的模型写一串“随机”整数，判断这个渠道背后最像哪个模型。**
 
 [![DSH plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-444444?style=flat-square)](#安装)
-[![version](https://img.shields.io/badge/version-0.2.3-555555?style=flat-square)](CHANGELOG.md)
+[![npm](https://img.shields.io/npm/v/dsh-llm-detector?style=flat-square&color=555555&label=npm)](https://www.npmjs.com/package/dsh-llm-detector)
 [![license](https://img.shields.io/badge/license-MIT-444444?style=flat-square)](LICENSE)
 [![reference bank](https://img.shields.io/badge/reference%20bank-76%20models-555555?style=flat-square)](#数据与参考库)
 
@@ -56,7 +56,37 @@
 
 ## 安装
 
-### 从本地目录安装（推荐）
+### 方式一：在插件页输入名字安装（推荐）
+
+插件已发布到 npm，包名就是 `dsh-llm-detector`：
+
+1. 打开 DSH 的 **Plugins** 页面，点 **Add plugin**；
+2. 在输入框里填 `dsh-llm-detector`（想固定版本可写 `dsh-llm-detector@1.0.0`），确认安装；
+3. 安装完成后左侧边栏出现 **模型指纹** 图标。若没有立即出现，刷新页面或重开一个会话。
+
+在对话里也可以让助手代装：
+
+```text
+帮我安装 dsh-llm-detector 这个插件
+```
+
+助手会调用 `plugin_manager` 的 `install_bundle`，目标填包名 `dsh-llm-detector`。
+
+### 方式二：npm 安装
+
+包已发布到 npm，可以先获取或在本地检查包内容：
+
+```bash
+npm view dsh-llm-detector version   # 1.0.0
+npm pack dsh-llm-detector           # 下载 tarball 并查看内容
+npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取项目的 node_modules）
+```
+
+> DSH 的插件以 profile 为单位安装，所以让 DSH 真正加载请用**方式一**（插件页输入包名），
+> 或在对话/命令行里执行 `plugin_manager install_bundle`，目标填 `dsh-llm-detector`。
+> 单纯 `npm install` 只会把包装进当前目录的 `node_modules`，不会自动注册到 DSH。
+
+### 方式三：从源码目录安装（开发用）
 
 1. 克隆仓库：
 
@@ -71,18 +101,16 @@
    - **对话里**：让助手用 `plugin_manager` 执行 `install_bundle`，目标填该目录的绝对路径，
      例如 `F:\code\dsh-llm-detector` 或 `~/code/dsh-llm-detector`。
 
-3. 安装完成后左侧边栏会出现 **模型指纹** 图标。若没有立即出现，刷新页面或重开一个会话。
+3. 安装完成后左侧边栏会出现 **模型指纹** 图标。
 
 插件不写 profile 的配置文件，也不保存任何密钥或接口地址。
 
 ### 更新已安装的版本
 
-插件以目录链接方式安装，源码改动后需要让 Host 重新加载：
-
-- 在 **Plugins** 里把该插件行**禁用再启用**；或
-- 重启 DSH。
-
-直接改文件不会热替换正在运行的模块。
+- 从 npm 安装：在 **Plugins** 里点该插件的升级/重装，或重新执行
+  `plugin_manager install_bundle` 并指定新版本，如 `dsh-llm-detector@1.0.0`；
+- 从源码目录安装：源码改动后需要让 Host 重新加载——在 **Plugins** 里把该插件行**禁用再启用**，
+  或重启 DSH。直接改文件不会热替换正在运行的模块。
 
 ### 运行要求
 

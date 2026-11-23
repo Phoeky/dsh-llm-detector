@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-detector",
-  "version": "0.2.3",
+  "version": "1.0.0",
   "description": "DeepSeek Harness plugin: detect the model behind a registered provider route with a number-fingerprint challenge, a sidebar panel and a closed reference bank.",
   "type": "module",
   "main": "index.js",

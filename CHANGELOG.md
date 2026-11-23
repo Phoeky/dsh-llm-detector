@@ -3,6 +3,23 @@
 本项目的所有重要变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-11-23
+
+首个稳定版，发布到 npm（[`dsh-llm-detector`](https://www.npmjs.com/package/dsh-llm-detector)）
+并创建 GitHub Release。
+
+### 新增
+
+- 可通过插件页输入包名 `dsh-llm-detector` 安装，无需先克隆仓库。
+- README 重写为 GitHub 风格：徽章、界面预览、安装/使用说明、原理摘要、鸣谢与许可证。
+- 界面示意图（中性深色主题）与 `CHANGELOG.md`。
+
+### 包含此前全部能力
+
+- 左侧边栏检测面板：渠道/模型/轮数/并发/思考强度、实时进度、取消、失败样本单独重试。
+- 对话里的 `llm_fingerprint` 工具（`list` / `detect`）。
+- 76 模型冻结参考库，闭集排名与校准置信度。
+
 ## [0.2.3] - 2026-11-23
 
 ### 新增
