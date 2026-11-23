@@ -20,11 +20,12 @@ export const inject = ['tools', 'llm']
 const MAX_ROUNDS = 3
 const MAX_SAMPLES = 3
 
-const notesFor = (defaultSelection) => [
+const notesFor = (defaultSelection, samples) => [
   '结果是参考库内的闭集排序：库外模型也会得到一个“最像”的候选，置信度不是身份证明。',
   '每次检测会真实调用模型：每轮 3 次、每次约 300 个整数的输出，按所用渠道计费。',
   'DSH 的 provider 适配层可能注入系统提示或改写请求，结果可能因此偏离参考库的采样条件。',
   defaultSelection ? '未指定 provider/model，已使用 DSH 当前默认模型。' : '',
+  samples < 3 ? '本次每轮不足 3 条回答，只给排名、没有校准置信度。' : '',
 ].filter(Boolean)
 
 const topResults = (results, count = 5) => results.slice(0, count).map(item => ({
@@ -397,7 +398,7 @@ export function apply(ctx) {
         },
         rounds: roundsOut,
         summary: summarize(collected),
-        notes: notesFor(usedDefault),
+        notes: notesFor(usedDefault, samples),
       }
     },
   }

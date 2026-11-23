@@ -85,5 +85,7 @@ node --check index.js  # 语法检查
 ```
 
 `scripts/build-data.mjs` 从 lm-detector 的 `unified_bank.json` 与 `shared_detector.bin`
-重新生成 `data/models.json` 与 `data/detector.bin`（需要把上游文件放到 `data/upstream/`
-与仓库上一级目录）。
+重新生成 `data/models.json` 与 `data/detector.bin`：把 bank 放到仓库根的 `data-bank.json`，
+把冻结检测器放到 `data/upstream/shared_detector.bin`（两者都不提交）。
+
+`scripts/smoke.mjs` 做离线检查：编解码往返、合成回答的排名、均匀随机数被序列检查拒绝。
