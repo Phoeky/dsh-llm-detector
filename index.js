@@ -12,6 +12,7 @@
  */
 import { createRunner, MAX_ROUNDS, MAX_SAMPLES } from './lib/runner.js'
 import { registerRoutes } from './lib/routes.js'
+import { applyProxyMode, disposeProxy, loadSaved } from './lib/proxy.js'
 
 export const name = 'dsh-llm-detector'
 export const inject = ['tools', 'llm']
@@ -20,6 +21,14 @@ export function apply(ctx) {
   const runner = createRunner(ctx)
   ctx.provide('llmDetector', runner)
   ctx.effect(() => () => runner.dispose(), 'dsh-llm-detector: runner')
+
+  // 恢复上次选择的出站代理；卸载插件时还原进程原始 fetch。
+  ctx.effect(() => {
+    loadSaved()
+      .then(saved => applyProxyMode(saved.mode, saved.url))
+      .catch(() => {})
+    return () => disposeProxy()
+  }, 'dsh-llm-detector: proxy')
   const tool = {
     name: 'llm_fingerprint',
     description: 'Detect which model a DeepSeek Harness provider route is actually served by, using a number-fingerprint challenge: the model writes about 300 integers from 1 to 355, and its distribution is compared with a closed reference bank. Use action=list to list registered providers and their models. Use action=detect to sample and rank; every detect makes 3 real model calls per round (more tokens than a chat turn) and returns a calibrated ranking, not an identity proof.',

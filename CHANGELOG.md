@@ -3,6 +3,19 @@
 本项目的所有重要变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-11-23
+
+### 新增
+
+- **出站代理**：默认直连，可选“系统代理”或“手动代理”（http/https/socks5），并提供“测试连接”。
+  代理作用于 DSH 进程内所有出站模型请求，切换后立即生效，选择会保存供下次启动沿用。
+- 面板顶部新增 **在 GitHub 上点个 ⭐** 跳转链接。
+
+### 实现说明
+
+- 通过 Host 进程内替换 `globalThis.fetch` 并附加同主版本 undici 的 `ProxyAgent` 实现代理，
+  切回直连时恢复原始 `fetch`；不改动任何 provider 配置或凭据。
+
 ## [1.0.0] - 2026-11-23
 
 首个稳定版，发布到 npm（[`dsh-llm-detector`](https://www.npmjs.com/package/dsh-llm-detector)）
