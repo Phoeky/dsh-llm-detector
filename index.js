@@ -10,132 +10,16 @@
  * - `list`：列出已注册的 provider/model；
  * - `detect`：对指定（或默认）模型采样并评分。
  */
-import { generateChallenges } from './lib/challenge.js'
-import { loadData } from './lib/data.js'
-import { runRound } from './lib/detect.js'
+import { createRunner, MAX_ROUNDS, MAX_SAMPLES } from './lib/runner.js'
+import { registerRoutes } from './lib/routes.js'
 
 export const name = 'dsh-llm-detector'
 export const inject = ['tools', 'llm']
 
-const MAX_ROUNDS = 3
-const MAX_SAMPLES = 3
-
-const notesFor = (defaultSelection, samples) => [
-  '结果是参考库内的闭集排序：库外模型也会得到一个“最像”的候选，置信度不是身份证明。',
-  '每次检测会真实调用模型：每轮 3 次、每次约 300 个整数的输出，按所用渠道计费。',
-  'DSH 的 provider 适配层可能注入系统提示或改写请求，结果可能因此偏离参考库的采样条件。',
-  defaultSelection ? '未指定 provider/model，已使用 DSH 当前默认模型。' : '',
-  samples < 3 ? '本次每轮不足 3 条回答，只给排名、没有校准置信度。' : '',
-].filter(Boolean)
-
-const topResults = (results, count = 5) => results.slice(0, count).map(item => ({
-  model: item.model,
-  display_name: item.display_name,
-  family_name: item.family_name,
-  score: item.score.toFixed(6),
-  probability: item.probability === null || item.probability === undefined ? '' : item.probability.toFixed(6),
-}))
-
-const roundSummary = (round) => {
-  const analysis = round.analysis
-  return {
-    index: round.index,
-    prediction: analysis.prediction || '',
-    prediction_name: analysis.prediction_name || '',
-    family_name: analysis.family_prediction_name || '',
-    probability: analysis.probability === null || analysis.probability === undefined
-      ? ''
-      : analysis.probability.toFixed(6),
-    decision: analysis.decision ?? 'ranked',
-    evidence_label: analysis.evidence?.label ?? '',
-    model_like: analysis.sequence?.model_like ?? true,
-    sequence: analysis.sequence
-      ? {
-          autocorrelation: Number(analysis.sequence.autocorrelation.toFixed(4)),
-          small_step_share: Number(analysis.sequence.small_step_share.toFixed(4)),
-          nearby_pair_share: Number(analysis.sequence.nearby_pair_share.toFixed(4)),
-        }
-      : { autocorrelation: 0, small_step_share: 0, nearby_pair_share: 0 },
-    used_outputs: analysis.used_outputs,
-    top: topResults(analysis.results),
-    diagnostics: analysis.diagnostics.map(d => ({
-      index: d.index + 1,
-      parsed_numbers: d.parsed_numbers,
-      minimum_numbers: d.minimum_numbers,
-      accepted: d.accepted,
-    })),
-    samples: round.samples.map(sample => ({
-      challenge: sample.challenge.id,
-      expected_count: sample.expectedCount,
-      state: sample.state,
-      count: sample.count,
-      ...(sample.error ? { error: sample.error } : {}),
-      ...(sample.note ? { note: sample.note } : {}),
-    })),
-    usage: round.samples.reduce((total, sample) => ({
-      inputTokens: total.inputTokens + (sample.usage?.inputTokens ?? 0),
-      outputTokens: total.outputTokens + (sample.usage?.outputTokens ?? 0),
-    }), { inputTokens: 0, outputTokens: 0 }),
-  }
-}
-
-const summarize = (rounds) => {
-  const ranked = rounds.filter(round => round.analysis?.results?.length)
-  const counts = new Map()
-  for (const round of ranked) {
-    const id = round.analysis.prediction
-    counts.set(id, (counts.get(id) ?? 0) + 1)
-  }
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
-  const probabilities = ranked
-    .map(round => round.analysis.probability)
-    .filter(value => typeof value === 'number')
-  return {
-    rounds: rounds.length,
-    valid_rounds: ranked.length,
-    top_candidate: top?.[0] ?? '',
-    top_candidate_name: ranked.find(round => round.analysis.prediction === top?.[0])?.analysis.prediction_name ?? '',
-    top_candidate_rounds: top?.[1] ?? 0,
-    mean_probability: probabilities.length
-      ? (probabilities.reduce((a, b) => a + b, 0) / probabilities.length).toFixed(6)
-      : '',
-  }
-}
-
-const listProviders = async (llm, onlyProvider) => {
-  const providers = llm.listProviders()
-  if (onlyProvider) {
-    const known = providers.find(provider => provider.id === onlyProvider)
-    if (!known) {
-      throw new Error(`未注册的 provider：${onlyProvider}。可用：${providers.map(p => p.id).join(', ') || '（无）'}`)
-    }
-    const models = await llm.listModels(onlyProvider)
-    return {
-      providers: [known],
-      models: models.map(model => ({ provider: onlyProvider, id: model.id, name: model.name })),
-    }
-  }
-  return {
-    providers: providers.map(provider => ({ id: provider.id, name: provider.name })),
-    models: [],
-  }
-}
-
-const resolveSelection = (ctx, args) => {
-  let provider = args.provider
-  let model = args.model
-  if (!provider || !model) {
-    const selection = ctx.get('agentDefaultModel')?.currentSelection?.()
-    provider ||= selection?.provider
-    model ||= selection?.model
-  }
-  if (!provider || !model) {
-    throw new Error('未指定 provider/model，且当前 DSH 没有默认模型选择。请先运行 action=list 查看可用的 provider，再显式传入。')
-  }
-  return { provider, model, usedDefault: !args.provider || !args.model }
-}
-
 export function apply(ctx) {
+  const runner = createRunner(ctx)
+  ctx.provide('llmDetector', runner)
+  ctx.effect(() => () => runner.dispose(), 'dsh-llm-detector: runner')
   const tool = {
     name: 'llm_fingerprint',
     description: 'Detect which model a DeepSeek Harness provider route is actually served by, using a number-fingerprint challenge: the model writes about 300 integers from 1 to 355, and its distribution is compared with a closed reference bank. Use action=list to list registered providers and their models. Use action=detect to sample and rank; every detect makes 3 real model calls per round (more tokens than a chat turn) and returns a calibrated ranking, not an identity proof.',
@@ -230,16 +114,15 @@ export function apply(ctx) {
                 probability: { type: 'string' },
                 decision: { type: 'string' },
                 evidence_label: { type: 'string' },
-                model_like: { type: 'boolean' },
-                sequence: {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: {
-                    autocorrelation: { type: 'number' },
-                    small_step_share: { type: 'number' },
-                    nearby_pair_share: { type: 'number' },
-                  },
-                },
+                evidence_reason: { type: 'string' },
+                confidence_status: { type: 'string' },
+                abnormal_samples: { type: 'integer' },
+                sample_total: { type: 'integer' },
+                complete_samples: { type: 'integer' },
+                started_at: { type: 'integer' },
+                finished_at: { type: 'integer' },
+                model_like: { type: 'string' },
+                sequence: { type: 'string' },
                 used_outputs: { type: 'integer' },
                 top: {
                   type: 'array',
@@ -274,12 +157,19 @@ export function apply(ctx) {
                     type: 'object',
                     additionalProperties: false,
                     properties: {
-                      challenge: { type: 'string' },
+                      id: { type: 'string' },
+                      index: { type: 'integer' },
+                      round: { type: 'integer' },
                       expected_count: { type: 'integer' },
                       state: { type: 'string' },
                       count: { type: 'integer' },
+                      completion: { type: 'string' },
                       error: { type: 'string' },
                       note: { type: 'string' },
+                      started_at: { type: 'integer' },
+                      finished_at: { type: 'integer' },
+                      prompt: { type: 'string' },
+                      text: { type: 'string' },
                     },
                   },
                 },
@@ -305,9 +195,14 @@ export function apply(ctx) {
               top_candidate_name: { type: 'string' },
               top_candidate_rounds: { type: 'integer' },
               mean_probability: { type: 'string' },
+              tied: { type: 'boolean' },
+              probability_rounds: { type: 'integer' },
+              uncalibrated_rounds: { type: 'integer' },
             },
           },
           notes: { type: 'array', items: { type: 'string' } },
+          job_id: { type: 'string' },
+          status: { type: 'string' },
         },
       },
       render(_args, value) {
@@ -346,10 +241,10 @@ export function apply(ctx) {
     },
     timeoutMs: 900_000,
     async execute(args, exec) {
+      const runner = ctx.llmDetector
       const action = args.action ?? 'detect'
-      const llm = ctx.llm
       if (action === 'list') {
-        const listed = await listProviders(llm, args.provider)
+        const listed = await runner.listProviders(args.provider)
         return {
           action: 'list',
           provider: args.provider ?? '',
@@ -358,63 +253,21 @@ export function apply(ctx) {
           ...listed,
           models: listed.models,
           notes: [],
+          job_id: '',
+          status: 'complete',
         }
       }
-
-      const { provider, model, usedDefault } = resolveSelection(ctx, args)
-      const available = llm.listProviders()
-      if (!available.some(item => item.id === provider)) {
-        throw new Error(`未注册的 provider：${provider}。可用：${available.map(p => p.id).join(', ') || '（无）'}`)
-      }
-      const rounds = Math.max(1, Math.min(MAX_ROUNDS, args.rounds ?? 1))
-      const samples = Math.max(1, Math.min(MAX_SAMPLES, args.samples_per_round ?? 3))
-      const data = await loadData()
-      const collected = []
-      const signal = exec.signal
-      for (let index = 0; index < rounds; index++) {
-        if (signal?.aborted) throw new Error('检测已取消')
-        const challenges = generateChallenges(samples)
-        const round = await runRound({
-          llm,
-          provider,
-          model,
-          challenges,
-          signal,
-          reasoningEffort: args.reasoning_effort,
-          parallel: 1,
-          detector: data.detector,
-          models: data.models,
-        })
-        round.index = index + 1
-        collected.push(round)
-      }
-
-      const roundsOut = collected.map(round => {
-        const out = roundSummary(round)
-        if (args.include_replies) {
-          out.replies = round.samples.map(sample => sample.text.slice(0, 200))
-        }
-        return out
-      })
-      return {
-        action: 'detect',
-        provider,
-        model,
-        used_default: usedDefault,
-        reference: {
-          models: data.models.length,
-          built_at: data.builtAt,
-          detector_bytes: data.detectorBytes,
-          calibration_tau: data.detector.calibration?.tau === undefined
-            ? ''
-            : String(data.detector.calibration.tau),
-        },
-        rounds: roundsOut,
-        summary: summarize(collected),
-        notes: notesFor(usedDefault, samples),
-      }
+      return runner.execute({ ...args, signal: exec.signal })
     },
   }
 
   ctx.tools.register(tool)
+
+  // 左侧边页面通过同源 HTTP 路由调用同一个 runner；没有 webServer 的 profile
+  // （例如纯 headless）仍可使用模型工具。
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['webServer'], (webCtx) => {
+      registerRoutes(webCtx, runner)
+    })
+  }
 }

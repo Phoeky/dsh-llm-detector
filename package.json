@@ -1,17 +1,19 @@
 {
   "name": "dsh-llm-detector",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness plugin: detect the model behind a registered provider route with a number-fingerprint challenge and a closed reference bank.",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness plugin: detect the model behind a registered provider route with a number-fingerprint challenge, a sidebar panel and a closed reference bank.",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
+    "client.js",
     "lib",
     "data/detector.bin",
     "data/models.json",
@@ -47,6 +49,16 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-modules"
+      ],
+      "platform": "web"
     }
   }
 }
