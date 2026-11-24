@@ -1,5 +1,7 @@
 # dsh-llm-detector
 
+[简体中文](README.md) · [English](README.en.md)
+
 **让 DeepSeek Harness 里注册的模型写一串“随机”整数，判断这个渠道背后最像哪个模型。**
 
 [![DSH plugin](https://img.shields.io/badge/DeepSeek%20Harness-plugin-444444?style=flat-square)](#安装)
@@ -36,7 +38,6 @@
 - 🧭 **左侧边栏面板**：选渠道与模型、实时进度、取消、失败样本单独重试。
 - 💬 **对话里也能用**：直接说“检测当前模型的指纹”，助手会调用 `llm_fingerprint` 工具。
 - 🎚️ **思考强度可选**：读取模型真实支持的档位（low/high/max 等），也可保持模型默认。
-- 🌐 **出站代理可选**：默认直连，可切系统代理或手动代理（http/https/socks5），并提供连通性测试。
 - 📊 **可解释的结果**：第一候选、前 5 名、校准置信度、序列检查、每条样本的整数数与失败原因。
 - 🔒 **不保存凭据**：请求经 DSH 的 `llm` 服务发出；页面接口不返回密钥或接口地址。
 - 🧱 **只读参考库**：检测不改动参考数据；结果是参考库内的闭集排序。
@@ -137,14 +138,13 @@ npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取�
    “最常见候选”。
 
 页面里的“两种使用方式”和“如何解读结果”默认收起，点开即可查看说明。
-
-**出站网络**：面板里的“出站网络”折叠卡可切换代理——默认**直连**，也可选**系统代理**或
-**手动代理**（填 `http://127.0.0.1:7897` 或 `socks5://127.0.0.1:1080` 等），并提供“测试连接”。
-代理作用于 DSH 进程内所有出站模型请求，切换后立即生效；选择会保存，下次启动沿用。
 面板顶部还有 **在 GitHub 上点个 ⭐** 的仓库跳转链接。
 
 置信度旁会标注“参考库内相对置信度，非身份证明”。若样本是**异常截断**（例如达到
 `max-tokens`），该轮只给排名、不给校准置信度；这与“收满要求数量后主动停止”不同。
+
+失败样本在**本轮还在采样时**就可以单独重试，不必等整轮结束；重试会沿用原提示词，
+并在本轮评分前完成，成功后自动计入排名。
 
 ### 在对话中使用
 
@@ -241,8 +241,9 @@ include_replies: false             # 是否在结果里附带提示词与原始�
 node --version          # ^22.19 或 >=24
 node --check index.js   # 语法检查
 
-node scripts/smoke.mjs        # 离线：编解码往返、合成排名、序列检查
-node scripts/retry-test.mjs   # 离线：失败样本单独重试
+node scripts/smoke.mjs         # 离线：编解码往返、合成排名、序列检查
+node scripts/retry-test.mjs    # 离线：轮次结束后的单样本重试
+node scripts/retry-live-test.mjs  # 离线：本轮采样期间的单样本重试
 node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI 相同 HTTP 路由
 ```
 
@@ -259,6 +260,7 @@ node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI �
 | `lib/runner.js` | 检测作业编排：UI 与工具共用，含取消、重试、单样本状态 |
 | `lib/routes.js` | 同源 HTTP 路由（bootstrap / models / model / start / job / cancel / retry） |
 | `lib/detect.js` | 经 `ctx.llm.stream` 采样与截断判定 |
+| `lib/proxy.js` | 出站代理实现（直连/系统/手动；界面暂未提供入口，可用 `/api/llm-detector/proxy/*` 配置） |
 | `lib/detector.js` | 排名、校准与结果判定 |
 | `lib/challenge.js` | 五种语言的挑战生成 |
 | `lib/data.js`、`lib/codec.js` | 参考数据加载与二进制检测器解码 |

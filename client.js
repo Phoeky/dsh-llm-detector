@@ -217,8 +217,6 @@ window.__ModuleLoader__.load({
 .dfp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .dfp-head-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .dfp-star{text-decoration:none;white-space:nowrap}
-.dfp-proxy-form{grid-template-columns:200px 1fr 260px}
-.dfp-proxy-actions{gap:6px;justify-content:flex-end}
 .dfp-title{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
 .dfp-sub{margin:6px 0 0;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-secondary);max-width:620px}
 .dfp-card{background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;padding:16px}
@@ -272,7 +270,7 @@ window.__ModuleLoader__.load({
 .dfp-empty{padding:32px 16px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:13px}
 .dfp-spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--dsw-alias-border-l2);border-top-color:var(--dsw-alias-brand-primary);border-radius:50%;animation:dfp-spin .8s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes dfp-spin{to{transform:rotate(360deg)}}
-@media (max-width:760px){.dfp-form{grid-template-columns:1fr 1fr}.dfp-proxy-form{grid-template-columns:1fr}.dfp-samples{grid-template-columns:1fr}.dfp-root{padding:16px}.dfp-head-actions{flex-wrap:wrap}}
+@media (max-width:760px){.dfp-form{grid-template-columns:1fr 1fr}.dfp-samples{grid-template-columns:1fr}.dfp-root{padding:16px}.dfp-head-actions{flex-wrap:wrap}}
 @media (max-width:480px){.dfp-form{grid-template-columns:1fr}.dfp-head{flex-direction:column}}
 @media (prefers-reduced-motion:reduce){.dfp-spinner{animation:none}}
 `
@@ -398,11 +396,6 @@ window.__ModuleLoader__.load({
         const [error, setError] = React.useState('')
         const [reference, setReference] = React.useState(null)
         const [referenceError, setReferenceError] = React.useState('')
-        const [proxy, setProxy] = React.useState({ mode: 'direct', url: '', active: '', system: '', error: '' })
-        const [proxyUrl, setProxyUrl] = React.useState('')
-        const [proxyBusy, setProxyBusy] = React.useState(false)
-        const [proxyMessage, setProxyMessage] = React.useState('')
-        const [proxyTestMessage, setProxyTestMessage] = React.useState('')
         const [localeTick, setLocaleTick] = React.useState(0)
         const [copied, setCopied] = React.useState(false)
         const copyTimer = React.useRef(null)
@@ -431,10 +424,6 @@ window.__ModuleLoader__.load({
               setProviders(boot.providers)
               setReference(boot.reference)
               setReferenceError(boot.referenceError || '')
-              if (boot.proxy) {
-                setProxy(boot.proxy)
-                setProxyUrl(boot.proxy.url || '')
-              }
               const preferred = boot.default?.provider && boot.providers.some(p => p.id === boot.default.provider)
                 ? boot.default.provider
                 : boot.providers[0]?.id ?? ''
@@ -583,41 +572,6 @@ window.__ModuleLoader__.load({
           finally { setPendingAction(false) }
         }
 
-        const applyProxy = async (mode) => {
-          if (proxyBusy) return
-          setProxyBusy(true)
-          setProxyMessage('')
-          setProxyTestMessage('')
-          try {
-            const result = await api('/proxy/apply', {
-              method: 'POST',
-              write: true,
-              body: JSON.stringify({ mode, url: mode === 'manual' ? proxyUrl : '' }),
-            })
-            setProxy(result)
-            setProxyUrl(result.url || '')
-            setProxyMessage(result.error
-              ? t('proxyTestFail', { error: result.error })
-              : t('proxyActive', { value: result.active || t('networkDirect') }))
-          } catch (cause) {
-            setProxyMessage(t('proxyTestFail', { error: cause.message }))
-          } finally { setProxyBusy(false) }
-        }
-
-        const testProxyConnection = async () => {
-          if (proxyBusy) return
-          setProxyBusy(true)
-          setProxyTestMessage(t('proxyTesting'))
-          try {
-            const result = await api('/proxy/test', { method: 'POST', write: true, body: JSON.stringify({}) })
-            setProxyTestMessage(result.ok
-              ? t('proxyTestOk', { status: result.status, ms: result.ms })
-              : t('proxyTestFail', { error: result.error || result.status }))
-          } catch (cause) {
-            setProxyTestMessage(t('proxyTestFail', { error: cause.message }))
-          } finally { setProxyBusy(false) }
-        }
-
         const activeRound = job?.current?.index ?? (job?.rounds?.length ?? 0) + 1
         const currentSamples = (job?.samples ?? []).filter(sample => sample.round === activeRound)
         const unfinished = running || (job && job.current && job.current.phase !== 'scored' && currentSamples.length > 0)
@@ -710,40 +664,6 @@ window.__ModuleLoader__.load({
                 reference ? h('p', { className: 'dfp-note' }, `${t('reference')}: ${reference.models} models · ${reference.built_at}`)
                   : h('p', { className: 'dfp-note dfp-warn' }, `${t('referenceUnavailable')}${referenceError ? ` · ${referenceError}` : ''}`))),
             h('details', { className: 'dfp-card dfp-how' },
-              h('summary', null, `${t('network')} · ${proxy.mode === 'manual' ? t('networkManual') : proxy.mode === 'system' ? t('networkSystem') : t('networkDirect')}${proxy.active ? ` (${proxy.active})` : ''}`),
-              h('div', { className: 'dfp-form dfp-proxy-form' },
-                h('div', { className: 'dfp-field' },
-                  h('label', { htmlFor: 'dfp-proxy-mode' }, t('proxyMode')),
-                  h('select', {
-                    id: 'dfp-proxy-mode',
-                    value: proxy.mode,
-                    disabled: proxyBusy || running,
-                    onChange: event => applyProxy(event.target.value),
-                  }, [
-                    h('option', { key: 'direct', value: 'direct' }, t('networkDirect')),
-                    h('option', { key: 'system', value: 'system' }, t('networkSystem')),
-                    h('option', { key: 'manual', value: 'manual' }, t('networkManual')),
-                  ])),
-                h('div', { className: 'dfp-field' },
-                  h('label', { htmlFor: 'dfp-proxy-url' }, t('proxyUrl')),
-                  h('input', {
-                    id: 'dfp-proxy-url',
-                    value: proxyUrl,
-                    placeholder: t('proxyUrlHint'),
-                    disabled: proxyBusy || running || proxy.mode !== 'manual',
-                    onChange: event => setProxyUrl(event.target.value),
-                    onKeyDown: event => { if (event.key === 'Enter' && proxy.mode === 'manual') applyProxy('manual') },
-                  })),
-                h('div', { className: 'dfp-field dfp-proxy-actions' },
-                  h('span', { className: 'dfp-meta' }, t('network')),
-                  h('div', { style: { display: 'flex', gap: '8px' } },
-                    h('button', { className: 'dfp-btn', disabled: proxyBusy || running || proxy.mode !== 'manual', onClick: () => applyProxy('manual') }, t('proxyApply')),
-                    h('button', { className: 'dfp-btn', disabled: proxyBusy || running, onClick: testProxyConnection }, proxyBusy ? t('proxyTesting') : t('proxyTest'))))),
-              proxy.system ? h('p', { className: 'dfp-note' }, `${t('networkSystem')}: ${proxy.system}`) : null,
-              proxyMessage ? h('p', { className: 'dfp-note' }, proxyMessage) : null,
-              proxyTestMessage ? h('p', { className: 'dfp-note' }, proxyTestMessage) : null,
-              h('p', { className: 'dfp-note' }, t('proxyNote'))),
-            h('details', { className: 'dfp-card dfp-how' },
               h('summary', null, t('usageTitle')),
               h('ul', { className: 'dfp-usage-list' },
                 h('li', null, t('usagePanel')),
@@ -780,7 +700,12 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'dfp-round-title' },
                   `${t('roundOf', { n: activeRound, total: job?.options?.rounds ?? 1 })} · ${job?.current?.phase === 'scoring' ? t('phaseScoring') : running ? t('roundInProgress') : t('incomplete')}`),
                 running ? h('span', { className: 'dfp-spinner', 'aria-hidden': 'true' }) : null),
-              h('div', { className: 'dfp-samples' }, displaySamples.map(sample => h(SampleCard, { key: sample.id, sample })))) : null,
+              h('div', { className: 'dfp-samples' }, displaySamples.map(sample => h(SampleCard, {
+                key: sample.id,
+                sample,
+                onRetry: (target) => retrySample(activeRound, target),
+                retryDisabled: busy || pendingAction,
+              })))) : null,
             (job?.rounds ?? []).map(round => h(RoundView, {
               key: round.index,
               round,
