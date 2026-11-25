@@ -286,12 +286,14 @@ window.__ModuleLoader__.load({
       let token = ''
 
       const api = async (path, options = {}) => {
+        const { write, ...fetchOptions } = options
         const response = await fetch(API + path, {
-          ...options,
+          credentials: 'same-origin',
+          ...fetchOptions,
           headers: {
             Accept: 'application/json',
-            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-            ...(options.write ? { 'x-llm-detector-token': token } : {}),
+            ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+            ...(write ? { 'x-llm-detector-token': token } : {}),
           },
         })
         const data = await response.json().catch(() => ({}))

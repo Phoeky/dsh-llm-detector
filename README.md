@@ -229,7 +229,7 @@ include_replies: false             # 是否在结果里附带提示词与原始�
   上游许可证见 `data/LM-DETECTOR-LICENSE`，修改说明见 [NOTICE](NOTICE)。
 - 上游项目又致谢 **[xqy2006/ModelTrace](https://github.com/xqy2006/ModelTrace)** 提供的算法思路参考和部分原始数据。
 
-此外，感谢 DSH 提供的 `llm`、`tools`、slot 与 webServer 扩展点，以及本地验证时使用的各 provider 渠道。
+此外，感谢 DSH 提供的 `llm`、`tools`、slot 与 `connection.fetch` 扩展点，以及本地验证时使用的各 provider 渠道。
 
 ## 许可证
 
@@ -242,9 +242,10 @@ node --version          # ^22.19 或 >=24
 node --check index.js   # 语法检查
 
 node scripts/smoke.mjs         # 离线：编解码往返、合成排名、序列检查
+node scripts/routes-test.mjs   # 离线：connection.fetch 路由注册、鉴权与请求校验
 node scripts/retry-test.mjs    # 离线：轮次结束后的单样本重试
 node scripts/retry-live-test.mjs  # 离线：本轮采样期间的单样本重试
-node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI 相同 HTTP 路由
+node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI 相同认证 HTTP 路由（需 DSH_COOKIE 或 DSH_CONNECT_TOKEN）
 ```
 
 `scripts/build-data.mjs` 可从 lm-detector 的 `unified_bank.json` 与 `shared_detector.bin`
@@ -258,7 +259,7 @@ node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI �
 | `index.js` | Host 插件：注册 `llm_fingerprint` 工具与 `/api/llm-detector/*` 路由 |
 | `client.js` | 浏览器端：左侧边栏图标与检测面板 |
 | `lib/runner.js` | 检测作业编排：UI 与工具共用，含取消、重试、单样本状态 |
-| `lib/routes.js` | 同源 HTTP 路由（bootstrap / models / model / start / job / cancel / retry） |
+| `lib/routes.js` | 经 `ctx.connection.fetch.register` 注册的认证 HTTP 路由（bootstrap / models / model / start / job / cancel / retry） |
 | `lib/detect.js` | 经 `ctx.llm.stream` 采样与截断判定 |
 | `lib/proxy.js` | 出站代理实现（直连/系统/手动；界面暂未提供入口，可用 `/api/llm-detector/proxy/*` 配置） |
 | `lib/detector.js` | 排名、校准与结果判定 |

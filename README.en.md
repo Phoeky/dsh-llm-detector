@@ -254,7 +254,7 @@ This plugin builds on prior work:
 - The upstream project in turn credits **[xqy2006/ModelTrace](https://github.com/xqy2006/ModelTrace)**
   for the algorithm idea and part of the original data.
 
-Thanks also to DSH for the `llm`, `tools`, slot and webServer extension points, and to the provider
+Thanks also to DSH for the `llm`, `tools`, slot and `connection.fetch` extension points, and to the provider
 routes used for local verification.
 
 ## License
@@ -268,9 +268,10 @@ node --version          # ^22.19 or >=24
 node --check index.js   # syntax check
 
 node scripts/smoke.mjs            # offline: codec roundtrip, synthetic ranking, sequence check
+node scripts/routes-test.mjs      # offline: connection.fetch route registration, auth and body checks
 node scripts/retry-test.mjs       # offline: retry after a round finishes
 node scripts/retry-live-test.mjs  # offline: retry while the round is still sampling
-node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # live: same HTTP routes as the panel
+node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # live: same authenticated HTTP routes (needs DSH_COOKIE or DSH_CONNECT_TOKEN)
 ```
 
 `scripts/build-data.mjs` regenerates `data/models.json` and `data/detector.bin` from lm-detector's
@@ -284,7 +285,7 @@ Plugin layout:
 | `index.js` | Host plugin: registers the `llm_fingerprint` tool and `/api/llm-detector/*` routes |
 | `client.js` | Browser half: sidebar icon and detection panel |
 | `lib/runner.js` | Detection job orchestration shared by panel and tool, including cancel and retry |
-| `lib/routes.js` | Same-origin HTTP routes (bootstrap / models / model / start / job / cancel / retry) |
+| `lib/routes.js` | Authenticated HTTP routes via `ctx.connection.fetch.register` (bootstrap / models / model / start / job / cancel / retry) |
 | `lib/detect.js` | Sampling through `ctx.llm.stream` and truncation detection |
 | `lib/detector.js` | Ranking, calibration and result decisions |
 | `lib/challenge.js` | Five-language challenge generator |

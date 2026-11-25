@@ -272,11 +272,13 @@ export function apply(ctx) {
 
   ctx.tools.register(tool)
 
-  // 左侧边页面通过同源 HTTP 路由调用同一个 runner；没有 webServer 的 profile
-  // （例如纯 headless）仍可使用模型工具。
+  // 左侧边页面通过 DSH 的 connection.fetch 认证路由调用同一个 runner；
+  // 没有 connection 的 profile（例如纯 headless）仍可使用模型工具。
   if (typeof ctx.inject === 'function') {
-    ctx.inject(['webServer'], (webCtx) => {
-      registerRoutes(webCtx, runner)
+    ctx.inject(['connection'], (connCtx) => {
+      if (typeof connCtx.connection?.fetch?.register === 'function') {
+        registerRoutes(connCtx, runner)
+      }
     })
   }
 }

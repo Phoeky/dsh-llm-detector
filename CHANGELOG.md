@@ -3,6 +3,20 @@
 本项目的所有重要变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2] - 2026-11-25
+
+### 安全与修复
+
+- 将全部 `/api/llm-detector/*` HTTP 路由从 `ctx.webServer.register` 迁移至 DSH 的 `ctx.connection.fetch.register` 认证通道，在 0.2.2 及以下与 0.2.3+ 宿主中均自动受 Host / Origin / `Sec-Fetch-Site` 与浏览器会话 Cookie 校验保护，并明确限定 GET / POST 方法。
+- `index.js` 改为按需注入 `connection` 服务（纯 headless 场景仍正常提供 `llm_fingerprint` 工具）。
+- `client.js` 发起同源请求时显式携带 `credentials: 'same-origin'`；写操作令牌比对改用 `timingSafeEqual`。
+
+### 测试与文档
+
+- 新增离线路由与鉴权测试 `scripts/routes-test.mjs`。
+- 更新 `scripts/ui-flow.mjs` 以支持通过 `DSH_COOKIE` 或 `DSH_CONNECT_TOKEN` 携带已认证会话。
+- 同步更新中英文 README 中的扩展点说明与开发命令。
+
 ## [1.1.1] - 2026-11-24
 
 ### 修复
