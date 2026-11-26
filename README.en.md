@@ -47,6 +47,8 @@ usage:
   the model default.
 - 📊 **Explainable results**: top candidate, top 5, calibrated confidence, sequence check, per-sample
   integer counts and failure reasons.
+- 🕘 **Persistent history**: finished runs are saved locally across restarts; filter, inspect full
+  snapshots, reuse parameters in one click, clear records, or query history from chat.
 - 🔒 **No credentials stored**: requests go through DSH's `llm` service; the panel API never returns
   keys or endpoint URLs.
 - 🧱 **Read-only reference bank**: detection never modifies reference data; results are a closed-set
@@ -75,7 +77,7 @@ If this plugin is useful, consider [starring it on GitHub](https://github.com/Ph
 The plugin is published on npm as `dsh-llm-detector`:
 
 1. Open DSH's **Plugins** page and click **Add plugin**;
-2. Enter `dsh-llm-detector` (pin a version with `dsh-llm-detector@1.1.0` if you prefer), then confirm;
+2. Enter `dsh-llm-detector` (pin a version with `dsh-llm-detector@1.2.0` if you prefer), then confirm;
 3. The **Model fingerprint** icon appears in the left sidebar. If it does not, refresh the page or
    open a new session.
 
@@ -92,7 +94,7 @@ The assistant calls `plugin_manager`'s `install_bundle` with the package name `d
 The package is on npm; you can inspect or install it locally:
 
 ```bash
-npm view dsh-llm-detector version   # 1.1.0
+npm view dsh-llm-detector version   # 1.2.0
 npm pack dsh-llm-detector           # download the tarball and inspect its contents
 npm install dsh-llm-detector        # install into a project (DSH does not read project node_modules)
 ```
@@ -124,7 +126,7 @@ The plugin does not write profile configuration files and stores no keys or endp
 ### Updating
 
 - npm install: use the upgrade/reinstall action in **Plugins**, or run
-  `plugin_manager install_bundle` with a version, e.g. `dsh-llm-detector@1.1.0`;
+  `plugin_manager install_bundle` with a version, e.g. `dsh-llm-detector@1.2.0`;
 - source checkout: after editing files, make the Host reload the plugin — toggle the plugin row
   **off and on** in **Plugins**, or restart DSH. Editing files does not hot-replace running modules.
 
@@ -149,7 +151,10 @@ Click the **Model fingerprint** icon in the left sidebar (same column as Plugins
    and recomputes the round's ranking and confidence — no need to re-run the whole round. Retry works
    **while the round is still sampling**, not only after it ends;
 5. After each round: top candidate, confidence, top 5 candidates, sequence check and token usage;
-   with several rounds the panel also summarizes the most frequent candidate.
+   with several rounds the panel also summarizes the most frequent candidate;
+6. Finished runs are saved automatically in the **Detection history** card, where you can filter
+   records, inspect full snapshots without disturbing an active run, reuse parameters in one click,
+   or delete/clear entries.
 
 The “Two ways to use it” and “How to read the result” cards are collapsed by default. The panel header
 also links to the repository (**Star on GitHub**).
@@ -173,7 +178,7 @@ sample diagnostics.
 
 ### Model tool
 
-`llm_fingerprint` has two actions.
+`llm_fingerprint` has three actions.
 
 ```text
 action: list
@@ -194,6 +199,14 @@ include_replies: false             # attach prompts and raw replies to the resul
 
 It returns each round's top candidate, top 5, confidence, sequence check, sample diagnostics and token
 usage, plus the most frequent candidate across rounds.
+
+```text
+action: history
+provider: codearts                 # optional; filter by provider
+limit: 10                          # optional; 1–50, default 10
+```
+
+Returns recent persisted detection history summaries.
 
 ## How it works
 
@@ -239,7 +252,8 @@ The reference bank currently covers **76 models and 2,812 reference replies**, s
   them from the sample card.
 - This version does not include tokenizer probing (inferring the upstream tokenizer from reported
   token counts) or image mode.
-- Detection results live only in the DSH process and are cleared on restart.
+- Detection history is persisted at `<DSH_HOME>/llm-detector/history.json` (keeping the latest 100
+  entries by default) and can be deleted individually or cleared from the panel.
 
 ## Acknowledgements
 
@@ -269,6 +283,7 @@ node --check index.js   # syntax check
 
 node scripts/smoke.mjs            # offline: codec roundtrip, synthetic ranking, sequence check
 node scripts/routes-test.mjs      # offline: connection.fetch route registration, auth and body checks
+node scripts/history-test.mjs     # offline: persistent history store, retry sync and tool history action
 node scripts/retry-test.mjs       # offline: retry after a round finishes
 node scripts/retry-live-test.mjs  # offline: retry while the round is still sampling
 node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # live: same authenticated HTTP routes (needs DSH_COOKIE or DSH_CONNECT_TOKEN)
@@ -285,7 +300,8 @@ Plugin layout:
 | `index.js` | Host plugin: registers the `llm_fingerprint` tool and `/api/llm-detector/*` routes |
 | `client.js` | Browser half: sidebar icon and detection panel |
 | `lib/runner.js` | Detection job orchestration shared by panel and tool, including cancel and retry |
-| `lib/routes.js` | Authenticated HTTP routes via `ctx.connection.fetch.register` (bootstrap / models / model / start / job / cancel / retry) |
+| `lib/routes.js` | Authenticated HTTP routes via `ctx.connection.fetch.register` (bootstrap / models / model / start / job / cancel / retry / history) |
+| `lib/history.js` | Persistent detection history store (atomic writes, retention cap, filtering, graceful recovery) |
 | `lib/detect.js` | Sampling through `ctx.llm.stream` and truncation detection |
 | `lib/detector.js` | Ranking, calibration and result decisions |
 | `lib/challenge.js` | Five-language challenge generator |

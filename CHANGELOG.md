@@ -3,6 +3,20 @@
 本项目的所有重要变更记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-11-26
+
+### 新增
+
+- **检测历史持久化存储（`lib/history.js`）**：每次检测结束（完成 / 取消 / 失败）自动保存完整快照至本地 `<DSH_HOME>/llm-detector/history.json`（默认保留最近 100 条），支持跨重启留存、串行原子落盘与损坏文件自动降级。
+- **侧边栏历史记录面板（`client.js`）**：顶部操作栏新增“历史”快捷入口，底部新增检测历史卡片，支持关键词筛选、手动刷新、单条删除、带二次确认的清空历史、点击回看完整轮次/序列检查/原始问答（不影响后台正在运行的实时检测），以及一键“填入表单”复用历史参数重测。
+- **对话工具历史查询（`index.js`、`lib/runner.js`）**：`llm_fingerprint` 新增 `action: "history"`（支持可选 `provider` 与 `limit`），并区分记录来源（面板 / 对话）；单样本重试完成后同步更新对应历史记录中的重算结果。
+- **认证历史 HTTP 路由（`lib/routes.js`）**：在 `ctx.connection.fetch.register` 认证通道下新增 `GET /api/llm-detector/history`、`GET /api/llm-detector/history/item`、`POST /api/llm-detector/history/delete` 与 `POST /api/llm-detector/history/clear`，并在 `/api/llm-detector/bootstrap` 附带初始历史摘要。
+
+### 测试与文档
+
+- 新增离线历史记录测试 `scripts/history-test.mjs`，并扩展 `scripts/routes-test.mjs` 覆盖全部 14 条认证路由与写操作鉴权。
+- 同步更新中英文 README 中的特性、使用说明、`llm_fingerprint` 工具文档、限制说明与目录结构。
+
 ## [1.1.2] - 2026-11-25
 
 ### 安全与修复

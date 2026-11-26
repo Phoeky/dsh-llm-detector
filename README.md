@@ -39,6 +39,7 @@
 - 💬 **对话里也能用**：直接说“检测当前模型的指纹”，助手会调用 `llm_fingerprint` 工具。
 - 🎚️ **思考强度可选**：读取模型真实支持的档位（low/high/max 等），也可保持模型默认。
 - 📊 **可解释的结果**：第一候选、前 5 名、校准置信度、序列检查、每条样本的整数数与失败原因。
+- 🕘 **持久化检测历史**：每次检测自动保存至本地，跨重启留存；面板支持筛选、回看完整结果、一键复用参数重测与清理，对话工具也支持查询历史。
 - 🔒 **不保存凭据**：请求经 DSH 的 `llm` 服务发出；页面接口不返回密钥或接口地址。
 - 🧱 **只读参考库**：检测不改动参考数据；结果是参考库内的闭集排序。
 
@@ -65,7 +66,7 @@
 插件已发布到 npm，包名就是 `dsh-llm-detector`：
 
 1. 打开 DSH 的 **Plugins** 页面，点 **Add plugin**；
-2. 在输入框里填 `dsh-llm-detector`（想固定版本可写 `dsh-llm-detector@1.0.0`），确认安装；
+2. 在输入框里填 `dsh-llm-detector`（想固定版本可写 `dsh-llm-detector@1.2.0`），确认安装；
 3. 安装完成后左侧边栏出现 **模型指纹** 图标。若没有立即出现，刷新页面或重开一个会话。
 
 在对话里也可以让助手代装：
@@ -81,7 +82,7 @@
 包已发布到 npm，可以先获取或在本地检查包内容：
 
 ```bash
-npm view dsh-llm-detector version   # 1.0.0
+npm view dsh-llm-detector version   # 1.2.0
 npm pack dsh-llm-detector           # 下载 tarball 并查看内容
 npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取项目的 node_modules）
 ```
@@ -112,7 +113,7 @@ npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取�
 ### 更新已安装的版本
 
 - 从 npm 安装：在 **Plugins** 里点该插件的升级/重装，或重新执行
-  `plugin_manager install_bundle` 并指定新版本，如 `dsh-llm-detector@1.0.0`；
+  `plugin_manager install_bundle` 并指定新版本，如 `dsh-llm-detector@1.2.0`；
 - 从源码目录安装：源码改动后需要让 Host 重新加载——在 **Plugins** 里把该插件行**禁用再启用**，
   或重启 DSH。直接改文件不会热替换正在运行的模块。
 
@@ -135,7 +136,8 @@ npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取�
 4. 某条样本失败或被取消时，样本卡片上会出现 **重试**：沿用这条样本的原提示词重新采样，
    成功后自动重算本轮排名与置信度，不用整轮重跑；
 5. 每轮结束后显示第一候选、置信度、前 5 个候选、序列检查与 token 用量；多轮时顶部汇总
-   “最常见候选”。
+   “最常见候选”；
+6. 每次检测结束自动写入本地**检测历史**卡片，可按关键词筛选、点击回看完整快照、一键“填入表单”复用参数重测，或单条删除 / 清空历史。
 
 页面里的“两种使用方式”和“如何解读结果”默认收起，点开即可查看说明。
 面板顶部还有 **在 GitHub 上点个 ⭐** 的仓库跳转链接。
@@ -160,7 +162,7 @@ npm install dsh-llm-detector        # 装进某个项目（DSH 本身不读取�
 
 ### 模型工具
 
-`llm_fingerprint` 支持两个动作。
+`llm_fingerprint` 支持三个动作。
 
 ```text
 action: list
@@ -181,6 +183,14 @@ include_replies: false             # 是否在结果里附带提示词与原始�
 
 返回每轮的第一候选、前 5 个候选、置信度、序列检查、样本诊断与 token 用量，以及跨轮的
 “最常见候选”。
+
+```text
+action: history
+provider: codearts                 # 可选，按渠道过滤
+limit: 10                          # 可选，1–50，默认 10
+```
+
+读取最近持久化的检测历史摘要列表。
 
 ## 原理
 
@@ -216,7 +226,7 @@ include_replies: false             # 是否在结果里附带提示词与原始�
 - 同源、蒸馏或共用分词器的模型指纹天然接近，可能互相混淆。
 - 渠道限流（例如每账号并发上限）会让部分样本失败，可在样本卡片上单独重试。
 - 本版本不含分词器探测（对照 API 的 token 计数反推上游分词器）与图片模式。
-- 检测结果只保存在 DSH 进程内，重启后清空。
+- 历史记录持久化保存在 `<DSH_HOME>/llm-detector/history.json`（默认保留最近 100 条），可随时在面板中单条删除或清空。
 
 ## 鸣谢
 
@@ -243,6 +253,7 @@ node --check index.js   # 语法检查
 
 node scripts/smoke.mjs         # 离线：编解码往返、合成排名、序列检查
 node scripts/routes-test.mjs   # 离线：connection.fetch 路由注册、鉴权与请求校验
+node scripts/history-test.mjs  # 离线：历史持久化存储、重试同步与工具 history 动作
 node scripts/retry-test.mjs    # 离线：轮次结束后的单样本重试
 node scripts/retry-live-test.mjs  # 离线：本轮采样期间的单样本重试
 node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI 相同认证 HTTP 路由（需 DSH_COOKIE 或 DSH_CONNECT_TOKEN）
@@ -259,7 +270,8 @@ node scripts/ui-flow.mjs codearts deepseek-v4.1-flash-1017   # 真实：走 UI �
 | `index.js` | Host 插件：注册 `llm_fingerprint` 工具与 `/api/llm-detector/*` 路由 |
 | `client.js` | 浏览器端：左侧边栏图标与检测面板 |
 | `lib/runner.js` | 检测作业编排：UI 与工具共用，含取消、重试、单样本状态 |
-| `lib/routes.js` | 经 `ctx.connection.fetch.register` 注册的认证 HTTP 路由（bootstrap / models / model / start / job / cancel / retry） |
+| `lib/routes.js` | 经 `ctx.connection.fetch.register` 注册的认证 HTTP 路由（bootstrap / models / model / start / job / cancel / retry / history） |
+| `lib/history.js` | 检测历史持久化存储（原子落盘、容量裁剪、筛选与容错读取） |
 | `lib/detect.js` | 经 `ctx.llm.stream` 采样与截断判定 |
 | `lib/proxy.js` | 出站代理实现（直连/系统/手动；界面暂未提供入口，可用 `/api/llm-detector/proxy/*` 配置） |
 | `lib/detector.js` | 排名、校准与结果判定 |

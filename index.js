@@ -6,10 +6,12 @@
  * Ikaleio/lm-detector（MIT）；本插件的差别是：请求经 DSH 的 `ctx.llm` 发出，
  * 因此检测的是本机实际配置的路由、认证与适配层。
  *
- * 提供两个动作：
+ * 提供三个动作：
  * - `list`：列出已注册的 provider/model；
- * - `detect`：对指定（或默认）模型采样并评分。
+ * - `detect`：对指定（或默认）模型采样并评分；
+ * - `history`：查询最近的检测历史记录。
  */
+import { createHistoryStore } from './lib/history.js'
 import { createRunner, MAX_ROUNDS, MAX_SAMPLES } from './lib/runner.js'
 import { registerRoutes } from './lib/routes.js'
 import { applyProxyMode, disposeProxy, loadSaved } from './lib/proxy.js'
@@ -18,7 +20,8 @@ export const name = 'dsh-llm-detector'
 export const inject = ['tools', 'llm']
 
 export function apply(ctx) {
-  const runner = createRunner(ctx)
+  const history = createHistoryStore()
+  const runner = createRunner(ctx, { history })
   ctx.provide('llmDetector', runner)
   ctx.effect(() => () => runner.dispose(), 'dsh-llm-detector: runner')
 
@@ -31,15 +34,15 @@ export function apply(ctx) {
   }, 'dsh-llm-detector: proxy')
   const tool = {
     name: 'llm_fingerprint',
-    description: 'Detect which model a DeepSeek Harness provider route is actually served by, using a number-fingerprint challenge: the model writes about 300 integers from 1 to 355, and its distribution is compared with a closed reference bank. Use action=list to list registered providers and their models. Use action=detect to sample and rank; every detect makes 3 real model calls per round (more tokens than a chat turn) and returns a calibrated ranking, not an identity proof.',
+    description: 'Detect which model a DeepSeek Harness provider route is actually served by, using a number-fingerprint challenge: the model writes about 300 integers from 1 to 355, and its distribution is compared with a closed reference bank. Use action=list to list registered providers and their models. Use action=history to read recent persisted detection results. Use action=detect to sample and rank; every detect makes 3 real model calls per round (more tokens than a chat turn) and returns a calibrated ranking, not an identity proof.',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
         action: {
           type: 'string',
-          enum: ['detect', 'list'],
-          description: 'detect (default): sample the model and rank candidates. list: list registered providers, or models of the given provider.',
+          enum: ['detect', 'list', 'history'],
+          description: 'detect (default): sample the model and rank candidates. list: list registered providers, or models of the given provider. history: list recent detection history entries.',
         },
         provider: {
           type: 'string',
@@ -64,6 +67,10 @@ export function apply(ctx) {
         include_replies: {
           type: 'boolean',
           description: 'Include prompts and raw replies in the structured result (each reply is bounded); default false. The sidebar panel shows them by default.',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Maximum number of history entries to return when action=history (1–50, default 10).',
         },
       },
       required: ['action'],
@@ -210,6 +217,34 @@ export function apply(ctx) {
             },
           },
           notes: { type: 'array', items: { type: 'string' } },
+          history: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string' },
+                source: { type: 'string' },
+                status: { type: 'string' },
+                provider: { type: 'string' },
+                model: { type: 'string' },
+                used_default: { type: 'boolean' },
+                created_at: { type: 'integer' },
+                started_at: { type: 'integer' },
+                finished_at: { type: 'integer' },
+                error: { type: 'string' },
+                reasoning_effort: { type: 'string' },
+                rounds: { type: 'integer' },
+                valid_rounds: { type: 'integer' },
+                top_candidate: { type: 'string' },
+                top_candidate_name: { type: 'string' },
+                top_candidate_rounds: { type: 'integer' },
+                mean_probability: { type: 'string' },
+                tied: { type: 'boolean' },
+              },
+            },
+          },
+          history_total: { type: 'integer' },
           job_id: { type: 'string' },
           status: { type: 'string' },
         },
@@ -221,6 +256,23 @@ export function apply(ctx) {
             lines.push('', `Models of ${value.provider}:`, ...value.models.map(model => `- ${model.id} — ${model.name}`))
           }
           return [{ type: 'text', text: `Registered providers:\n${lines.join('\n')}` }]
+        }
+        if (value.action === 'history') {
+          const items = value.history ?? []
+          if (!items.length) {
+            return [{ type: 'text', text: '暂无模型指纹检测历史记录。' }]
+          }
+          const lines = items.map((item, idx) => {
+            const ts = item.finished_at || item.created_at
+            const timeText = ts ? new Date(ts).toLocaleString() : ''
+            const prob = item.mean_probability ? ` ${(Number(item.mean_probability) * 100).toFixed(1)}%` : ''
+            const result = item.top_candidate_name
+              ? `${item.top_candidate_name}${prob} (${item.valid_rounds}/${item.rounds} 轮)`
+              : (item.error || item.status)
+            const src = item.source === 'tool' ? '对话' : '面板'
+            return `${idx + 1}. [${timeText}] ${item.provider}/${item.model} → ${result}（${src}）`
+          })
+          return [{ type: 'text', text: `最近 ${items.length} 条检测历史（共 ${value.history_total ?? items.length} 条）：\n${lines.join('\n')}` }]
         }
         const lines = value.rounds.map(round => {
           const probability = round.probability === ''
@@ -266,7 +318,26 @@ export function apply(ctx) {
           status: 'complete',
         }
       }
-      return runner.execute({ ...args, include_replies: args.include_replies ?? false, signal: exec.signal })
+      if (action === 'history') {
+        const limit = Math.max(1, Math.min(50, Math.floor(Number(args.limit) || 10)))
+        const listed = await runner.listHistory({ provider: args.provider ?? '', limit })
+        return {
+          action: 'history',
+          provider: args.provider ?? '',
+          model: '',
+          used_default: false,
+          history: listed.items.map(item => ({
+            ...item,
+            started_at: item.started_at ?? 0,
+            finished_at: item.finished_at ?? 0,
+          })),
+          history_total: listed.total,
+          notes: [],
+          job_id: '',
+          status: 'complete',
+        }
+      }
+      return runner.execute({ ...args, source: 'tool', include_replies: args.include_replies ?? false, signal: exec.signal })
     },
   }
 

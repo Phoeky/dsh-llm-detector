@@ -5,7 +5,13 @@
  * 用法：node scripts/routes-test.mjs
  */
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { apply } from '../index.js'
+
+const tempDir = await mkdtemp(join(tmpdir(), 'dsh-llm-detector-routes-'))
+process.env.DSH_LLM_DETECTOR_HISTORY_FILE = join(tempDir, 'history.json')
 
 const ENDPOINT_SEGMENT = /^[A-Za-z0-9_$.-]+$/
 
@@ -110,8 +116,12 @@ const expectedMethods = {
   '/api/llm-detector/proxy/apply': ['POST'],
   '/api/llm-detector/proxy/test': ['POST'],
   '/api/llm-detector/retry': ['POST'],
+  '/api/llm-detector/history': ['GET'],
+  '/api/llm-detector/history/item': ['GET'],
+  '/api/llm-detector/history/delete': ['POST'],
+  '/api/llm-detector/history/clear': ['POST'],
 }
-assert.equal(routes.size, Object.keys(expectedMethods).length, '应注册全部 10 条路由')
+assert.equal(routes.size, Object.keys(expectedMethods).length, '应注册全部 14 条路由')
 for (const [path, methods] of Object.entries(expectedMethods)) {
   const route = routes.get(path)
   assert.ok(route, `缺少路由: ${path}`)
@@ -149,7 +159,7 @@ const proxyRes = await callRoute('/api/llm-detector/proxy')
 assert.equal(proxyRes.status, 200)
 
 // 3. 写操作缺少或错误令牌均应返回 403
-for (const writePath of ['/api/llm-detector/start', '/api/llm-detector/cancel', '/api/llm-detector/retry', '/api/llm-detector/proxy/apply', '/api/llm-detector/proxy/test']) {
+for (const writePath of ['/api/llm-detector/start', '/api/llm-detector/cancel', '/api/llm-detector/retry', '/api/llm-detector/proxy/apply', '/api/llm-detector/proxy/test', '/api/llm-detector/history/delete', '/api/llm-detector/history/clear']) {
   const missing = await callRoute(writePath, { method: 'POST', body: '{}' })
   assert.equal(missing.status, 403, `${writePath} 缺少令牌应返回 403`)
   const wrong = await callRoute(writePath, {
@@ -197,6 +207,50 @@ const cancelRes = await callRoute('/api/llm-detector/cancel', {
 assert.equal(cancelRes.status, 200)
 assert.equal((await cancelRes.json()).ok, true)
 
+// 等待取消收尾，验证历史记录已落盘并可通过路由读取、删除、清空
+for (let i = 0; i < 40; i++) {
+  const snap = await (await callRoute(`/api/llm-detector/job?id=${encodeURIComponent(started.id)}`)).json()
+  if (snap.status !== 'running' && snap.status !== 'cancelling') break
+  await new Promise(resolve => setTimeout(resolve, 50))
+}
+const histListRes = await callRoute('/api/llm-detector/history')
+assert.equal(histListRes.status, 200)
+const histList = await histListRes.json()
+assert.equal(histList.items.length, 1, '取消结束的作业应写入历史记录')
+assert.equal(histList.items[0].id, started.id)
+assert.equal(histList.items[0].source, 'panel')
+
+const histItemMissing = await callRoute('/api/llm-detector/history/item')
+assert.equal(histItemMissing.status, 400)
+const histItemNotFound = await callRoute('/api/llm-detector/history/item?id=nonexistent')
+assert.equal(histItemNotFound.status, 404)
+const histItemRes = await callRoute(`/api/llm-detector/history/item?id=${encodeURIComponent(started.id)}`)
+assert.equal(histItemRes.status, 200)
+assert.equal((await histItemRes.json()).id, started.id)
+
+const delNotFound = await callRoute('/api/llm-detector/history/delete', {
+  method: 'POST',
+  headers: authHeaders,
+  body: JSON.stringify({ id: 'nonexistent' }),
+})
+assert.equal(delNotFound.status, 404)
+const delRes = await callRoute('/api/llm-detector/history/delete', {
+  method: 'POST',
+  headers: authHeaders,
+  body: JSON.stringify({ id: started.id }),
+})
+assert.equal(delRes.status, 200)
+assert.equal((await delRes.json()).ok, true)
+assert.equal((await (await callRoute('/api/llm-detector/history')).json()).items.length, 0)
+
+const clearRes = await callRoute('/api/llm-detector/history/clear', {
+  method: 'POST',
+  headers: authHeaders,
+  body: '{}',
+})
+assert.equal(clearRes.status, 200)
+assert.equal((await clearRes.json()).ok, true)
+
 // 6. 卸载清理所有已注册路由
 ctx.disposeAll()
 assert.equal(routes.size, 0, '插件卸载后应清理所有 Fetch 路由')
@@ -207,5 +261,6 @@ apply(headless.ctx)
 assert.equal(headless.registeredTools.length, 1)
 assert.equal(headless.routes.size, 0)
 headless.ctx.disposeAll()
+await rm(tempDir, { recursive: true, force: true })
 
 console.log('ROUTES TEST PASS')
